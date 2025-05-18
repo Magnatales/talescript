@@ -9,5 +9,3 @@ Use Lua to control your 2D scenes with commands like:
 - Moving **characters** and triggering **animations**
 - Playing **sounds**, giving **items**, or opening **UI elements**
 - Controlling **timing** with `async` functions thanks to the power of [Lua-CSharp](https://github.com/nuskey8/Lua-CSharp)
-
-Whether you're building a story-rich RPG or a quirky visual novel, TaleScript gives you full control over your narrative flow — with a syntax that feels like writing the scene itself..
