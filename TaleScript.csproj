@@ -1,0 +1,12 @@
+<Project Sdk="Godot.NET.Sdk/4.4.1">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="addons\talescript\Lua\Stories\guard_bg_story.lua" />
+    <Content Include="addons\talescript\Lua\TaleScript.lua" />
+    <Content Include="addons\talescript\Lua\Test.lua" />
+    <Content Include="addons\talescript\Lua\Test2.lua" />
+  </ItemGroup>
+</Project>
