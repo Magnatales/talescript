@@ -1,26 +1,75 @@
 ---@meta
 
----@param message string
+---@param text string
 --- Prints a message to the console.
-function print(message) end
+function print(text) end
 
 ---@param ... any
 --- Pretty prints any object to the console.
 function pprint(...) end
 
----@param dialog string
+---@async
+---@param key string
+--- Says something.
+function say(key) end
+
+---@param key string
+function make_aggressive(key) end
+
+---@async
+---@param ... string Keys
+---@return number
+function choice(...) end
+
+---@async
+---@param what string
 ---@return boolean was_shown
---- Only runs a dialog once. Returns if it's the first time.
-function once(dialog) end
+--- Says once. Returns if it's the first time.
+function say_once(what) end
+
+---@enum MOOD
+MOOD = {
+    neutral = "neutral",
+    happy = "happy",
+    sad = "sad",
+    angry = "angry",
+    surprised = "surprised",
+    confused = "confused",
+}
+
+---@param name string
+---@param mood? MOOD
+--- Displays the left speaker with an optional mood.
+function speaker_left(name, mood) end
+
+---@param name string
+---@param mood? string
+--- Displays the right speaker with an optional mood.
+function speaker_right(name, mood) end
+
+--- Closes the left speaker.
+function close_speaker_left() end
+
+--- Closes the right speaker.
+function close_speaker_right() end
+
+--- Closes the dialog box.
+function close_dialog() end
+
+---@param key string
+---@return boolean was_shown
+function once(key) end
 
 ---@param path string
 --- Jumps to another .lua file.
 function detour(path) end
 
+---@async
 ---@param seconds number
 --- Waits for a number of seconds.
 function wait(seconds) end
 
+---@async
 ---@param actor string
 ---@param x number
 ---@param y number
@@ -55,7 +104,7 @@ function set(key, value) end
 ---@param key string
 ---@return any
 --- Gets a global variable.
-function get(key) end
+function get_key(key) end
 
 ---@param question string
 ---@param options string[]

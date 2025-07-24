@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Godot;
@@ -8,18 +9,18 @@ namespace Code.TaleScript.Extensions;
 public static class LuaStateExtensions
 {
     private const string BASE_PATH = "res://addons/talescript/Lua/";
-    public static async ValueTask<LuaValue[]> DoFileAccessAsync(this LuaState state, string luaPath, CancellationToken cancellationToken = default)
+    public static ValueTask<LuaValue[]> DoFileAccessAsync(this LuaState state, string luaPath, CancellationToken cancellationToken = default)
     {
         var fullPath = BASE_PATH + luaPath;
         if (!FileAccess.FileExists(fullPath))
         {
-            GD.PushError($"Lua file not found: {fullPath}");
-            return [];
+            Godot.GD.PushError($"Lua file not found: {fullPath}");
+            return new ValueTask<LuaValue[]>([]);
         }
 
         using var file = FileAccess.Open(fullPath, FileAccess.ModeFlags.Read);
         var luaCode = file.GetAsText();
-
-        return await state.DoStringAsync(luaCode, "luaPath", cancellationToken: cancellationToken);
+        
+        return state.DoStringAsync(luaCode, luaPath, cancellationToken: cancellationToken);
     }
 }

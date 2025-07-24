@@ -35,40 +35,43 @@ public static class Effects
                 return;
             }
 
-            await GDTask.Delay(mainTree.Root.GetProcessDeltaTime(), ct);
-        }
-
-        color.A = to;
-        if (color.A >= 1f)
-        {
-            control.Visible = true;
+            await GDTask.Delay((float)mainTree.Root.GetProcessDeltaTime(), ct);
         }
 
         control.Modulate = color;
     }
+    
+    public static async Task TypeWriterAsync(RichTextLabel textLabel, string text, float lettersPerSecond, InterruptTokenSource it = null, CancellationToken ct = default)
+    {
+        textLabel.Text = text;
+        await TypeWriterAsync(textLabel, lettersPerSecond, null, null, null, null, it, ct);
+    }
+
+    public static async Task TypeWriterAsync(RichTextLabel textLabel, float lettersPerSecond, InterruptTokenSource it = null, CancellationToken ct = default)
+    {
+        await TypeWriterAsync(textLabel, lettersPerSecond, null, null, null, null, it, ct);
+    }
 
     public static async Task TypeWriterAsync(
-        RichTextLabel text,
+        RichTextLabel textLabel,
         float lettersPerSecond,
         Action<int> onCharacterTyped = null,
         Action onPauseStarted = null,
         Action onPauseEnded = null,
         Stack<(int position, float duration)> pausePositions = null,
-        TaskInterruptTokenSource tits = null,
+        InterruptTokenSource its = null,
         CancellationToken ct = default)
     {
         var mainTree = (SceneTree)Engine.GetMainLoop();
-        tits?.Start();
-        text.VisibleCharacters = 0;
-        text.VisibleRatio = 0;
+        its?.Start();
+        textLabel.VisibleCharacters = 0;
+        textLabel.VisibleRatio = 0;
 
-        await GDTask.Yield(ct);
+        var characterCount = textLabel.GetTotalCharacterCount();
 
-        var characterCount = text.GetTotalCharacterCount();
-
-        if (tits?.Token.IsInterruptRequested ?? false)
+        if (its?.Token.IsInterruptRequested ?? false)
         {
-            text.VisibleRatio = 1f;
+            textLabel.VisibleRatio = 1f;
             return;
         }
         
@@ -76,45 +79,45 @@ public static class Effects
         if (lettersPerSecond <= 0 || characterCount == 0)
         {
             // Show everything and return
-            text.VisibleRatio = 1;
-            tits?.Complete();
+            textLabel.VisibleRatio = 1;
+            its?.Complete();
             return;
         }
 
         var secondsPerLetter = 1.0f / lettersPerSecond;
-        var deltaTime = mainTree.Root.GetProcessDeltaTime();
+        var deltaTime = (float)mainTree.Root.GetProcessDeltaTime();
         var accumulator = deltaTime;
 
-        while (GodotObject.IsInstanceValid(text) && text.VisibleCharacters < characterCount)
+        while (GodotObject.IsInstanceValid(textLabel) && textLabel.VisibleCharacters < characterCount)
         {
-            if (tits != null && tits.Token.IsInterruptRequested)
+            if (its != null && its.Token.IsInterruptRequested)
             {
-                text.VisibleRatio = 1f;
+                textLabel.VisibleRatio = 1f;
                 return;
             }
             
             // pause logic
             if (pausePositions is { Count: > 0 } &&
-                pausePositions.Peek().position == text.VisibleCharacters)
+                pausePositions.Peek().position == textLabel.VisibleCharacters)
             {
                 var pause = pausePositions.Pop();
                 onPauseStarted?.Invoke();
-                await GDTask.DelayInterruptable(pause.duration, tits?.Token ?? default , ct);
+                await GDTask.DelayInterruptable(pause.duration, its?.Token ?? default , ct);
                 onPauseEnded?.Invoke();
                 accumulator = 0;
                 continue;
             }
 
             //  character appearance
-            while (accumulator >= secondsPerLetter && text.VisibleCharacters < characterCount)
+            while (accumulator >= secondsPerLetter && textLabel.VisibleCharacters < characterCount)
             {
-                text.VisibleCharacters++;
+                textLabel.VisibleCharacters++;
 
-                onCharacterTyped?.Invoke(text.VisibleCharacters - 1);
+                onCharacterTyped?.Invoke(textLabel.VisibleCharacters - 1);
 
                 accumulator -= secondsPerLetter;
                 
-                char currentChar = GetCharAt(text.Text, text.VisibleCharacters - 1);
+                var currentChar = GetCharAt(textLabel.Text, textLabel.VisibleCharacters - 1);
                 
                 var pauseDuration = currentChar switch
                 {
@@ -127,7 +130,7 @@ public static class Effects
 
                 if (pauseDuration > 0)
                 {
-                    await GDTask.DelayInterruptable(pauseDuration, tits?.Token ?? default, ct);
+                    await GDTask.DelayInterruptable(pauseDuration, its?.Token ?? default, ct);
                 }
             }
 
@@ -135,12 +138,12 @@ public static class Effects
             await GDTask.Delay(deltaTime, ct);
         }
 
-        if (GodotObject.IsInstanceValid(text))
+        if (GodotObject.IsInstanceValid(textLabel))
         {
-           text.VisibleCharacters = characterCount;
-           text.VisibleRatio = 1f;
+           textLabel.VisibleCharacters = characterCount;
+           textLabel.VisibleRatio = 1f;
         }
-        tits?.Complete();
+        its?.Complete();
     }
     
     private static char GetCharAt(string input, int index)

@@ -1,6 +1,6 @@
 using System;
 
-public class TaskInterruptTokenSource
+public class InterruptTokenSource
 {
     internal enum TokenState
     {
@@ -11,7 +11,7 @@ public class TaskInterruptTokenSource
 
     internal TokenState State { get; private set; } = TokenState.NotRunning;
 
-    public TaskInterruptToken Token => new(this);
+    public InterruptToken Token => new(this);
 
     public void Start() => State = TokenState.Running;
     
@@ -22,18 +22,17 @@ public class TaskInterruptTokenSource
     }
 
     public void Complete() => State = TokenState.NotRunning;
-    public bool CanBeInterupted => State == TokenState.Running;
 }
 
-public readonly struct TaskInterruptToken
+public readonly struct InterruptToken
 {
-    private readonly TaskInterruptTokenSource _source;
+    private readonly InterruptTokenSource _source;
 
-    internal TaskInterruptToken(TaskInterruptTokenSource source)
+    internal InterruptToken(InterruptTokenSource source)
     {
         _source = source;
     }
 
-    public bool IsInterruptRequested => _source?.State == TaskInterruptTokenSource.TokenState.Interrupted;
+    public bool IsInterruptRequested => _source?.State == InterruptTokenSource.TokenState.Interrupted;
 }
 

@@ -2,11 +2,16 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <EnableDynamicLoading>true</EnableDynamicLoading>
+    <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
     <Content Include="addons\talescript\Lua\Stories\guard_bg_story.lua" />
     <Content Include="addons\talescript\Lua\TaleScript.lua" />
     <Content Include="addons\talescript\Lua\Test.lua" />
     <Content Include="addons\talescript\Lua\Test2.lua" />
+    <Content Include="addons\talescript\Lua\Test3.lua" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="LuaCSharp" Version="0.4.2" />
   </ItemGroup>
 </Project>

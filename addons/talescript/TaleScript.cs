@@ -1,59 +1,113 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Code.TaleScript.Extensions;
 using Code.TaleScript.Runtime.Utils;
 using Lua;
+using Lua.Libraries;
 using Lua.Standard;
 
 public partial class TaleScript : Node2D
 {
     [Export] private RichTextLabel _richLabelText;
-    private readonly TaskInterruptTokenSource _tits = new ();
-    private readonly CancellationTokenSource _cts = new();
-
-    private Dictionary<string, bool> stateflags = new();
+    private readonly InterruptTokenSource _its = new ();
+    private CancellationTokenSource _cts = new();
+    
+    private Queue<Story> _storyCache = new();
+    private bool _isPreloading = false;
+    private const int CacheSize = 10;
+    private int _shown;
 
     public override void _Ready()
     {
-        Console.SetOut(new GodotConsoleWriter(GodotConsoleWriter.OutputType.Info));
-        Console.SetError(new GodotConsoleWriter(GodotConsoleWriter.OutputType.Error));
-        Test().Forget();
+        _richLabelText.Text = "Fetching stories...";
+        PreloadStoriesAsync().Forget();
+        Test2().Forget();
+    }
+    
+    private async Task PreloadStoriesAsync()
+    {
+        if (_isPreloading) return;
+        _isPreloading = true;
+
+        try
+        {
+            for (int i = 0; i < CacheSize; i++)
+            {
+                var story = await StoryFetcher.GetRandomStoryAsync();
+                _storyCache.Enqueue(story);
+            }
+        }
+        catch (Exception e)
+        {
+            GD.PrintErr("Preload failed: ", e.Message);
+        }
+        finally
+        {
+            _isPreloading = false;
+        }
+    }
+    
+    private async Task<Story> GetStoryAsync()
+    {
+        if (_storyCache.Count > 0)
+        {
+            return _storyCache.Dequeue();
+        }
+
+        // No cache — fetch one immediately
+        var story = await StoryFetcher.GetRandomStoryAsync();
+
+        // Start preloading the rest in the background
+        if (!_isPreloading)
+            _ = PreloadStoriesAsync();
+
+        return story;
     }
 
     private async Task Test2()
     {
-        var speed = 40f;
-        await Effects.TypeWriterAsync(_richLabelText, speed, null, null, null, null, _tits, _cts.Token);
-        await GDTask.WaitForInputEvent(nameof(Key.A));
-        await Effects.TypeWriterAsync(_richLabelText, speed, null, null, null, null,  _tits, _cts.Token);
-        await GDTask.WaitForInputEvent(nameof(MouseButton.Left));
-        await Effects.TypeWriterAsync(_richLabelText, speed, null, null, null, null,  _tits, _cts.Token);
-        await GDTask.WaitForInputEvent("ui_cancel");
-        await Effects.TypeWriterAsync(_richLabelText, speed, null, null, null, null,  _tits, _cts.Token);
-        await GDTask.WaitForInputEvent("ui_cancel");
-        await Effects.TypeWriterAsync(_richLabelText, speed, null, null, null, null,  _tits, _cts.Token);
-        await GDTask.WaitForInputEvent("ui_cancel");
+        for (int i = 0; i < CacheSize + 1; i++)
+        {
+            await TestText();
+            _richLabelText.Text += "\n\nClick to continue...";
+            await GDTask.WaitForInputEvent(nameof(MouseButton.Left));
+        }
         _richLabelText.Text = "done";
+    }
+
+    private async Task TestText()
+    {
+        // Check duration with a stopwatch
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var story = await GetStoryAsync();
+        var text = story.StoryText;
+        _shown++;
+        _richLabelText.Text = $"{_shown}/{CacheSize + 1} "; 
+        _richLabelText.Text += text;
+        stopwatch.Stop();
+        //Debug in seconds
+        GD.Print($"Fetched story in {stopwatch.Elapsed.TotalSeconds} seconds");
+        await Effects.TypeWriterAsync(_richLabelText, 40f, _its, _cts.Token);
     }
 
     public override void _Input(InputEvent e)
     {
         if (Input.IsActionJustPressed("ui_cancel"))
         {
-            _tits.TryInterrupt();
+            _its.TryInterrupt();
         }
     }
 
     private async Task Test()
     {
         var state = CreateState();
-        
         try
         {
-            var results = await state.DoFileAccessAsync("Test.lua");
+            var results = await state.DoFileAccessAsync("Test.lua", cancellationToken: _cts.Token);
             if (results.Length != 0)
             {
                 foreach (var result in results)
@@ -73,9 +127,6 @@ public partial class TaleScript : Node2D
                     }
                 }
             }
-
-            await GDTask.Delay(2f);
-            var results2 = await state.DoFileAccessAsync("Test.lua");
         }
         catch (LuaRuntimeException e)
         {
@@ -94,128 +145,44 @@ public partial class TaleScript : Node2D
     private LuaState CreateState()
     {
         var state = LuaState.Create();
-        
-        state.Environment["detour"] =  new LuaFunction(async (context, buffer, ct) =>
-        {
-            var detourState = CreateState();
-            var path = context.GetArgument<string>(0);
-            var results = await detourState.DoFileAccessAsync(path, cancellationToken: ct);
-            if (results.Length > 0)
-            {
-                buffer.Span[0] = results[0];
-                return 1;
-            }
-            return 0;
-        });
-        
-        state.Environment["once"] = new LuaFunction((context, buffer, ct) =>
-        {
-            var arg0 = context.GetArgument<string>(0);
-            if(stateflags.TryGetValue(arg0, out var alreadyCalled) && alreadyCalled)
-            {
-                buffer.Span[0] = true;
-                return new(1);
-            }
-            GD.Print(arg0);
-            stateflags[arg0] = true;
-            buffer.Span[0] = false;
-            return new(1);
-        });
-        
-        state.Environment["move"] = new LuaFunction((context, buffer, ct) =>
-        {
-            var arg0 = context.GetArgument<float>(0);
-            var arg1 = context.GetArgument<float>(1);
-            GlobalPosition  += new Vector2(arg0, arg1);
-            return new(1);
-        });
-        
-        state.Environment["wait"] = new LuaFunction(async (context, buffer, ct) =>
-        {
-            var sec = context.GetArgument<double>(0);
-            await Task.Delay(TimeSpan.FromSeconds(sec), ct);
-            return 0;
-        });
-        
-        state.Environment["pprint"] = new LuaFunction((context, buffer, ct) =>
-        {
-            GD.Print(state);
-            var sb = new System.Text.StringBuilder();
-            sb.Append("Pprint:");
-            if (context.ChunkName != null)
-            {
-                sb.Append($"From [{context.ChunkName}] ");
-            }
-
-            for (var index = 0; index < context.Arguments.Length; index++)
-            {
-                var value = context.Arguments[index];
-                switch (value.Type)
-                {
-                    case LuaValueType.Nil:
-                        if (index > 0) sb.Append(", ");
-                        sb.Append("nil");
-                        break;
-                    case LuaValueType.Boolean:
-                        if (index > 0) sb.Append(", ");
-                        sb.Append(value.ToBoolean() ? "true" : "false");
-                        break;
-                    case LuaValueType.Number:
-                        if (index > 0) sb.Append(", ");
-                        sb.Append(value.ToString());
-                        break;
-                    case LuaValueType.String:
-                        if (index > 0) sb.Append(", ");
-                        sb.Append($"\"{value.ToString()}\"");
-                        break;
-                    case LuaValueType.Table:
-                        var table = value.Read<LuaTable>();
-                        if (index > 0) sb.Append(", ");
-                        sb.Append("Table: { ");
-                        var span = table.GetArraySpan();
-                        for (var i = 0; i < span.Length; i++)
-                        {
-                            var pair = span[i];
-                            if (pair.Type == LuaValueType.Nil)
-                                continue;
-
-                            if (i > 0) sb.Append(", ");
-                            sb.Append($"{pair.ToString()}");
-                        }
-
-                        sb.Append(" }");
-                        break;
-                    default:
-                        GD.Print(value.ToString());
-                        break;
-                }
-            }
-
-            GD.Print(sb.Length > 0 ? sb.ToString() : "nil");
-            return new(1);
-        });
-        
-        state.Environment["print_table"] = new LuaFunction((context, buffer, ct) =>
-        {
-            var table = context.GetArgument<LuaTable>(0);
-            var values = table.GetArraySpan();
-
-            var sb = new System.Text.StringBuilder();
-            sb.Append("Table: { ");
-            for (var i = 0; i < values.Length; i++)
-            {
-                if (i > 0) sb.Append(' ');
-                sb.Append(values[i].ToString());
-                if (i < values.Length - 1) sb.Append(", ");
-            }
-            sb.Append(" }");
-            GD.Print(sb.ToString());
-
-            return new(1);
-        });
-        state.OpenStandardLibraries();
+        state.OpenBasicLibrary();
+        state.OpenDialogLibrary();
+        state.OpenDebugLibrary();
+        state.OpenActorLibrary();
+        state.OpenAsyncLibrary();
         return state;
     }
-    
-    
+
+}
+
+public class Story
+{
+    public string Title { get; set; }
+    public string Author { get; set; }
+    public string StoryText { get; set; }
+    public string Moral { get; set; }
+}
+
+public static class StoryFetcher
+{
+    private static readonly System.Net.Http.HttpClient httpClient = new ();
+
+    public static async Task<Story> GetRandomStoryAsync()
+    {
+        var response = await httpClient.GetAsync("https://shortstories-api.onrender.com/");
+        response.EnsureSuccessStatusCode();
+
+        var json = await response.Content.ReadAsStringAsync();
+
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+
+        return new Story
+        {
+            Title = root.GetProperty("title").GetString(),
+            Author = root.GetProperty("author").GetString(),
+            StoryText = root.GetProperty("story").GetString(),
+            Moral = root.GetProperty("moral").GetString()
+        };
+    }
 }

@@ -13,7 +13,7 @@ public static class GDTask
     public static async Task AsTask(this SignalAwaiter sa) => await sa;
     public static async Task WaitAsync(this SignalAwaiter sa, CancellationToken ct) => await sa.AsTask().WaitAsync(ct);
     
-    public static async Task Delay(double duration, CancellationToken ct = default)
+    public static async Task Delay(float duration, CancellationToken ct = default)
     {
         var sceneTree = (SceneTree)Engine.GetMainLoop();
         var timer = sceneTree.CreateTimer((float)duration);
@@ -60,7 +60,7 @@ public static class GDTask
         ct.ThrowIfCancellationRequested();
     }
     
-    public static async void Forget(this Task task, CancellationToken ct = default)
+    public static async void Forget(this Task task)
     {
         try
         {
@@ -76,7 +76,7 @@ public static class GDTask
         }
     }
     
-    public static async Task DelayInterruptable(float duration, TaskInterruptToken it = default, CancellationToken ct = default)
+    public static async Task DelayInterruptable(float duration, InterruptToken it = default, CancellationToken ct = default)
     {
         double timer = 0;
         while (timer < duration)
@@ -87,7 +87,7 @@ public static class GDTask
             }
 
             var mainTree = (SceneTree) Engine.GetMainLoop();
-            var deltaTime = mainTree.Root.GetProcessDeltaTime();
+            var deltaTime = (float)mainTree.Root.GetProcessDeltaTime();
             timer += deltaTime;
             await Delay(deltaTime, ct);
         }
@@ -129,7 +129,6 @@ public static class GDTask
         {
             if (!InputMap.HasAction(action)) continue;
             if (!Input.IsActionJustPressed(action)) continue;
-            GD.Print($"Action awaited pressed: {action}");
             if (_inputWaiters.TryGetValue(action, out var list))
             {
                 foreach (var tcs in list)
@@ -149,7 +148,6 @@ public static class GDTask
 
                 if (_inputWaiters.TryGetValue(keyString, out var list))
                 {
-                    GD.Print($"Key awaited pressed: {keyString}");
                     foreach (var tcs in list)
                         tcs.TrySetResult();
 
@@ -164,7 +162,6 @@ public static class GDTask
 
                 if (_inputWaiters.TryGetValue(buttonString, out var list))
                 {
-                    GD.Print($"Mouse button awaited pressed: {buttonString}");
                     foreach (var tcs in list)
                         tcs.TrySetResult();
 
